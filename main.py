@@ -1,10 +1,12 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all domains
 
 def load_and_prepare_data(file_path='places.csv'):
     # Load the CSV file
