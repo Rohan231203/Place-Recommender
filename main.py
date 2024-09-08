@@ -77,23 +77,26 @@ def vectorize_and_cluster(df, n_clusters=20):
 
     return tfidf_matrix, kmeans
 
-def find_cluster_for_place(place_name, df):
-    # Find the cluster of the input place
-    if place_name not in df.index:
-        return None  # Return None if place is not found
+def find_cluster_for_state(state_name, df):
+    # Find all places in the input state
+    state_places = df[df['State'].str.lower() == state_name.lower()]
 
-    place_cluster = df.loc[place_name, 'cluster']
+    if state_places.empty:
+        return None  # Return None if the state is not found
 
-    # Get all places in the same cluster
-    places_in_cluster = df[df['cluster'] == place_cluster].index.tolist()
+    # Get the unique clusters within the state
+    clusters_in_state = state_places['cluster'].unique()
 
-    return places_in_cluster
+    # Get all places in these clusters
+    places_in_clusters = df[df['cluster'].isin(clusters_in_state)].index.tolist()
+
+    return places_in_clusters
 
 @app.route('/api/cluster', methods=['GET'])
 def get_cluster():
-    place_name = request.args.get('place_name')
-    if not place_name:
-        return jsonify({'error': 'Place name is required'}), 400
+    state_name = request.args.get('state_name')
+    if not state_name:
+        return jsonify({'error': 'State name is required'}), 400
 
     try:
         # Load and prepare data
@@ -102,13 +105,13 @@ def get_cluster():
         # Vectorize and cluster the data
         tfidf_matrix, kmeans_model = vectorize_and_cluster(df)
 
-        # Find the entire cluster for the place
-        cluster_places = find_cluster_for_place(place_name, df)
+        # Find all clusters for the state
+        cluster_places = find_cluster_for_state(state_name, df)
 
         if cluster_places is None:
-            return jsonify({'error': f"Place '{place_name}' not found."}), 404
+            return jsonify({'error': f"State '{state_name}' not found."}), 404
 
-        return jsonify({'place': place_name, 'cluster': cluster_places}), 200
+        return jsonify({'state': state_name, 'cluster': cluster_places}), 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
