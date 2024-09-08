@@ -8,6 +8,7 @@ from sklearn.cluster import KMeans
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all domains
 
+
 def load_and_prepare_data(file_path='places.csv'):
     # Load the CSV file
     places = pd.read_csv(file_path)
@@ -66,6 +67,7 @@ def load_and_prepare_data(file_path='places.csv'):
 
     return places
 
+
 def vectorize_and_cluster(df, n_clusters=20):
     # Vectorize the 'tags' column using TfidfVectorizer
     tfidf = TfidfVectorizer(stop_words='english')
@@ -77,44 +79,72 @@ def vectorize_and_cluster(df, n_clusters=20):
 
     return tfidf_matrix, kmeans
 
-def find_cluster_for_state(state_name, df):
-    # Find all places in the input state
-    state_places = df[df['State'].str.lower() == state_name.lower()]
 
-    if state_places.empty:
-        return None  # Return None if the state is not found
+def detect_location_type(location_name, df):
+    # Check if the location_name matches any state in the dataset
+    if location_name.lower() in df['State'].str.lower().values:
+        return "state"
 
-    # Get the unique clusters within the state
-    clusters_in_state = state_places['cluster'].unique()
+    # Check if the location_name matches any city in the dataset
+    if location_name.lower() in df['City'].str.lower().values:
+        return "city"
+
+    # Return None if the location_name is neither a state nor a city
+    return None
+
+
+def find_cluster_for_location(location_name, df, location_type):
+    # Find all places in the input state or city
+    if location_type == "state":
+        places = df[df['State'].str.lower() == location_name.lower()]
+    elif location_type == "city":
+        places = df[df['City'].str.lower() == location_name.lower()]
+    else:
+        return None
+
+    if places.empty:
+        return None  # Return None if the location is not found
+
+    # Get the unique clusters within the location
+    clusters_in_location = places['cluster'].unique()
 
     # Get all places in these clusters
-    places_in_clusters = df[df['cluster'].isin(clusters_in_state)].index.tolist()
+    places_in_clusters = df[df['cluster'].isin(clusters_in_location)].index.tolist()
 
     return places_in_clusters
 
+
 @app.route('/api/cluster', methods=['GET'])
 def get_cluster():
-    state_name = request.args.get('state_name')
-    if not state_name:
-        return jsonify({'error': 'State name is required'}), 400
+    location_name = request.args.get('location_name')
+
+    if not location_name:
+        return jsonify({'error': 'Location name is required'}), 400
 
     try:
         # Load and prepare data
         df = load_and_prepare_data()
 
+        # Detect whether the input is a state or city
+        location_type = detect_location_type(location_name, df)
+
+        if location_type is None:
+            return jsonify({'error': f"Location '{location_name}' not found."}), 404
+
         # Vectorize and cluster the data
         tfidf_matrix, kmeans_model = vectorize_and_cluster(df)
 
-        # Find all clusters for the state
-        cluster_places = find_cluster_for_state(state_name, df)
+        # Find all clusters for the detected location type
+        cluster_places = find_cluster_for_location(location_name, df, location_type)
 
         if cluster_places is None:
-            return jsonify({'error': f"State '{state_name}' not found."}), 404
+            return jsonify({'error': f"{location_type.capitalize()} '{location_name}' not found."}), 404
 
-        return jsonify({'state': state_name, 'cluster': cluster_places}), 200
+        return jsonify({'location': location_name, 'type': location_type, 'cluster': cluster_places}), 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True)
